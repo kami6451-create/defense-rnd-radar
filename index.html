@@ -409,6 +409,7 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--rule);
 /* 오른쪽 위에 떠 있는 단추 묶음 — 검색 · 밝기 (2026-10-02 교수님 "밝기 단추 옆에 검색 단추") */
 .topfloat{position:fixed;top:12px;right:16px;z-index:60;display:flex;gap:8px;align-items:center}
 .topfloat .themebtn{position:static}
+.topfloat .themebtn[hidden]{display:none}   /* 돌아갈 화면이 없으면 '← 이전' 숨김 — inline-flex 가 hidden 을 이기지 않게 */
 .qfpop{position:absolute;top:calc(100% + 8px);right:0;display:flex;gap:6px;background:var(--panel);
   border:1px solid var(--rule-strong);border-radius:10px;padding:8px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
 .qfpop[hidden]{display:none}
@@ -556,10 +557,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610020804', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610020828', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610020804';
+    window.__DATA_V = '202610020828';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
