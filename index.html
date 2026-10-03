@@ -418,6 +418,25 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--rule);
 .qfpop input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .qfpop button{padding:7px 14px;font:inherit;font-size:13px;font-weight:600;border:0;border-radius:6px;background:var(--accent);color:var(--ground);cursor:pointer}
 .themebtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 공모 알림 신청 창 (2026-10-03) — 메일 쓰기 창을 열어 알림 계정에 '[구독] 관심 단어' 를 보내게 함 */
+.alpop{position:absolute;top:calc(100% + 8px);right:0;width:360px;max-width:calc(100vw - 32px);background:var(--panel);color:var(--ink);
+  border:1px solid var(--rule-strong);border-radius:10px;padding:14px 16px;box-shadow:0 6px 18px rgba(0,0,0,.22);font-size:13px;line-height:1.55;
+  max-height:calc(100vh - 60px);overflow-y:auto}  /* 고정 위치라 낮은 화면(휴대폰 가로)에서 아래 단추가 잘리지 않게 */
+.alpop[hidden]{display:none}
+.alpop h3{margin:0 0 6px;font-size:15px}
+.alpop p{margin:0 0 8px}
+.alpop label{display:block;margin:8px 0 4px;font-weight:600}
+.alpop input[type=text]{width:100%;box-sizing:border-box;padding:7px 10px;font:inherit;font-size:14px;border:1px solid var(--rule-strong);
+  border-radius:6px;background:var(--ground);color:var(--ink)}
+.alpop details{margin:8px 0;color:var(--muted)}
+.alpop details ul{margin:6px 0 0;padding-left:18px}
+.alpop .alok{display:flex;gap:6px;align-items:flex-start;font-weight:400;margin:8px 0}
+.alpop .algo{display:inline-block;margin:4px 0 8px;padding:8px 14px;border-radius:6px;background:var(--accent);color:var(--ground);
+  font-weight:600;text-decoration:none}
+.alpop .algo[aria-disabled=true]{opacity:.45;pointer-events:none}
+.alpop .alsmall{color:var(--muted);font-size:12px}
+.alpop code{font-size:12px}
+.alpop .alcopy{font:inherit;font-size:12px;padding:2px 8px;border:1px solid var(--rule-strong);border-radius:5px;background:var(--ground);color:var(--ink);cursor:pointer}
 @media(max-width:560px){ .themebtn{padding:5px 10px;font-size:12px} .topfloat{top:8px;right:8px;gap:6px} }
 </style>
 <script>
@@ -429,7 +448,21 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 <div class="topfloat" id="topfloat">
   <button type="button" class="themebtn" id="navback" hidden title="바로 앞 화면으로 (브라우저 '뒤로' 와 같음)">← 이전</button>
   <button type="button" class="themebtn" id="qfbtn" aria-expanded="false" aria-controls="qfpop" title="주제어로 과제 찾기">🔍 검색</button>
+  <button type="button" class="themebtn" id="alertbtn" hidden aria-expanded="false" aria-controls="alpop" title="관심 단어와 관련된 과제가 새로 공모에 뜨면 메일로 알려 드립니다">🔔 알림</button>
   <button type="button" class="themebtn" id="themebtn" aria-label="밝은 화면과 어두운 화면 바꾸기"></button>
+  <div class="alpop" id="alpop" role="dialog" aria-labelledby="alttl" hidden>
+    <h3 id="alttl">새 공모 알림 받기</h3>
+    <p>관심 단어를 적고 메일을 보내 두시면, 그 단어와 관련된 과제가 <b>새로 공모에 올라올 때</b> 하루 한 번 메일로 알려 드립니다.
+       보내는 곳: <b>MND-RND-Radar</b></p>
+    <label for="alkw">관심 단어 (쉼표로 여러 개)</label>
+    <input type="text" id="alkw" placeholder="예: 무인수상정, 레이다, 극초음속" autocomplete="off" maxlength="300">
+    <details><summary>개인정보 수집·이용 안내</summary><ul id="alpriv"></ul></details>
+    <label class="alok"><input type="checkbox" id="alagree"> 위 개인정보 수집·이용에 동의합니다</label>
+    <a class="algo" id="algo" href="#" aria-disabled="true">메일로 신청하기</a>
+    <p class="alsmall">메일 앱이 열리지 않으면 <b id="aladdr"></b> 로 제목을 <code>[구독] 관심 단어</code> 로 적어 보내 주십시오.
+       <button type="button" class="alcopy" id="alcopy">주소 복사</button></p>
+    <p class="alsmall">국방망(인트라넷) 메일로는 받을 수 없습니다 — 인터넷 메일에서 보내 주십시오. 알림을 끊으려면 제목 <code>[해지]</code> 로 메일을 보내거나 알림 메일 아래 링크를 누르십시오.</p>
+  </div>
   <form class="qfpop" id="qfpop" role="search" hidden>
     <input type="search" id="qfin" placeholder="찾을 주제어 — 예: 무인수상정 감시정찰" aria-label="찾을 주제어" autocomplete="off">
     <button type="submit">찾기</button>
@@ -557,10 +590,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610030902', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610032338', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610030902';
+    window.__DATA_V = '202610032338';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3558,6 +3591,57 @@ llmHealth();          // llm_server.py 로 열었으면 Claude 정밀 판단을 
 
 // --- 오른쪽 위 검색 단추 (2026-10-02 교수님) ---
 // 어디를 보고 있든 주제어를 치면 첫 화면 기준(과제 검색 · 전체)으로 찾고 과제 목록으로 내려갑니다 — 판정 보기·거르기는 풀림.
+// 주소의 검색어로 바로 열기 — 알림 메일의 과제 링크(…/?q=과제명)가 그 과제를 보여 주도록 (2026-10-03)
+(function(){
+  let q = null;
+  try { q = new URLSearchParams(location.search).get('q'); } catch(e) {}
+  q = (q || '').trim().slice(0, 200);
+  if(!q) return;
+  document.getElementById('q').value = q;
+  setMode('search'); go();
+  setTimeout(()=>{ const s = document.getElementById('sec-list'); if(s) s.scrollIntoView({block:'start'}); }, 80);
+})();
+
+// 공모 알림 신청 (2026-10-03 교수님 "관심 단어와 연관된 과제가 공모에 뜨면 이메일로 자동 포워딩 — 내 지메일, 보내는 계정 MND-RND-Radar")
+// 서버 없이 메일 쓰기 창(mailto)으로 알림 계정에 '[구독] 관심 단어' 를 보내게 합니다. 받아 보내는 것은 alert.py(매일 0시).
+// 알림 계정 주소는 build.py 가 .env 의 GMAIL_USER 로 채움 — 없으면 단추를 숨김.
+const ALERT_EMAIL = 'mnd.rnd.radar@gmail.com';
+(function(){
+  const btn = document.getElementById('alertbtn'), pop = document.getElementById('alpop');
+  if(!btn || !pop || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(ALERT_EMAIL)) return;
+  btn.hidden = false;
+  const kw = document.getElementById('alkw'), ok = document.getElementById('alagree'), go_ = document.getElementById('algo');
+  document.getElementById('aladdr').textContent = ALERT_EMAIL;
+  const PRIV = ['수집 항목: 이메일 주소, 관심 단어',
+                '이용 목적: 국방 R&D 레이더의 새 공모 과제 알림 메일 발송',
+                '보유 기간: 해지할 때까지(최대 1년). 해지하면 바로 지우고, 기간이 지나면 안내 메일을 보낸 뒤 지웁니다.',
+                '처리 방법: 운영자 컴퓨터에만 저장하며, 메일은 Google LLC(미국)의 Gmail 로 주고받습니다.',
+                '동의하지 않을 수 있으며, 동의하지 않으면 알림을 받을 수 없습니다.',
+                '문의: ' + ALERT_EMAIL];
+  document.getElementById('alpriv').innerHTML = PRIV.map(x=>`<li>${esc(x)}</li>`).join('');
+  const words = () => kw.value.split(/[,，、;\n]+/).map(s=>s.trim().replace(/\s+/g,' ')).filter(Boolean).slice(0, 10);
+  const sync = () => {
+    const w = words(), ready = ok.checked && w.length > 0;
+    go_.setAttribute('aria-disabled', String(!ready));
+    go_.href = ready ? 'mailto:' + ALERT_EMAIL
+      + '?subject=' + encodeURIComponent('[구독] ' + w.join(', '))
+      + '&body=' + encodeURIComponent('관심어: ' + w.join(', ') + '\n개인정보 수집·이용 안내를 읽었고 동의합니다.\n\n(이 메일을 그대로 보내면 신청됩니다. 관심 단어를 바꾸려면 [구독] 메일을 다시 보내 주십시오.)')
+      : '#';
+  };
+  const open = on => {
+    pop.hidden = !on; btn.setAttribute('aria-expanded', String(on));
+    if(on){ if(!kw.value){ const q = document.getElementById('q').value.trim(); if(q) kw.value = q; } sync(); kw.focus(); }
+  };
+  btn.addEventListener('click', ()=>open(pop.hidden));
+  kw.addEventListener('input', sync); ok.addEventListener('change', sync);
+  go_.addEventListener('click', e=>{ if(go_.getAttribute('aria-disabled') === 'true') e.preventDefault(); });
+  document.getElementById('alcopy').addEventListener('click', async e=>{
+    try { await navigator.clipboard.writeText(ALERT_EMAIL); e.target.textContent = '복사됨'; } catch(err) { e.target.textContent = ALERT_EMAIL; }
+  });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !pop.hidden){ open(false); btn.focus(); } });
+  document.addEventListener('click', e=>{ if(!pop.hidden && !e.target.closest('#alpop') && !e.target.closest('#alertbtn')) open(false); });
+})();
+
 // 화면 되돌아가기 (2026-10-02 교수님 "화학작용제 검색 → 히트맵에서 인공지능 칸 클릭 → 뒤로 가면 검색 목록이 다시 보여야")
 // 검색어·거르기·분야·연도·보기(판정 화면 포함)가 바뀔 때마다 브라우저 기록에 한 칸씩 남깁니다.
 // 브라우저 '뒤로'(마우스 뒤로 단추·Alt+←) 와 오른쪽 위 '← 이전' 이 같은 일을 합니다. 판정·정렬만 바뀐 것은 남기지 않습니다.
