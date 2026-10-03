@@ -448,7 +448,7 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 <div class="topfloat" id="topfloat">
   <button type="button" class="themebtn" id="navback" hidden title="바로 앞 화면으로 (브라우저 '뒤로' 와 같음)">← 이전</button>
   <button type="button" class="themebtn" id="qfbtn" aria-expanded="false" aria-controls="qfpop" title="주제어로 과제 찾기">🔍 검색</button>
-  <button type="button" class="themebtn" id="alertbtn" hidden aria-expanded="false" aria-controls="alpop" title="관심 단어와 관련된 과제가 새로 공모에 뜨면 메일로 알려 드립니다">🔔 알림</button>
+  <button type="button" class="themebtn" id="alertbtn" hidden aria-expanded="false" aria-controls="alpop" title="관심 단어와 관련된 과제가 새로 공모에 뜨면 메일로 알려 드립니다">🔔 새 공모 알림받기</button>
   <button type="button" class="themebtn" id="themebtn" aria-label="밝은 화면과 어두운 화면 바꾸기"></button>
   <div class="alpop" id="alpop" role="dialog" aria-labelledby="alttl" hidden>
     <h3 id="alttl">새 공모 알림 받기</h3>
@@ -590,10 +590,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610032338', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610032342', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610032338';
+    window.__DATA_V = '202610032342';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
