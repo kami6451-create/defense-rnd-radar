@@ -456,6 +456,7 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
        보내는 곳: <b>MND-RND-Radar</b></p>
     <label for="alkw">관심 단어 (쉼표로 여러 개)</label>
     <input type="text" id="alkw" placeholder="예: 무인수상정, 레이다, 극초음속" autocomplete="off" maxlength="300">
+    <p class="alsmall">새 공모를 모두 받으시려면 <code>신규 공고 전체</code> 라고 적으십시오. <button type="button" class="alcopy" id="alall">이걸로 채우기</button></p>
     <details><summary>개인정보 수집·이용 안내</summary><ul id="alpriv"></ul></details>
     <label class="alok"><input type="checkbox" id="alagree"> 위 개인정보 수집·이용에 동의합니다</label>
     <a class="algo" id="algo" href="#" aria-disabled="true">메일로 신청하기</a>
@@ -590,10 +591,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610032342', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610032350', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610032342';
+    window.__DATA_V = '202610032350';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3634,6 +3635,7 @@ const ALERT_EMAIL = 'mnd.rnd.radar@gmail.com';
   };
   btn.addEventListener('click', ()=>open(pop.hidden));
   kw.addEventListener('input', sync); ok.addEventListener('change', sync);
+  document.getElementById('alall').addEventListener('click', ()=>{ kw.value = '신규 공고 전체'; sync(); kw.focus(); });   // 새 공모 모두 받기 (alert.py ALL_KW)
   go_.addEventListener('click', e=>{ if(go_.getAttribute('aria-disabled') === 'true') e.preventDefault(); });
   document.getElementById('alcopy').addEventListener('click', async e=>{
     try { await navigator.clipboard.writeText(ALERT_EMAIL); e.target.textContent = '복사됨'; } catch(err) { e.target.textContent = ALERT_EMAIL; }
