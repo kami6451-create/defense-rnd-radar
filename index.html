@@ -611,10 +611,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610041058', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610041117', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610041058';
+    window.__DATA_V = '202610041117';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3450,7 +3450,7 @@ const simOpen = new Set();                 // 정밀 유사 과제를 펼친 결
 const SIM_STRIP = /[\s\-_·/.,()\[\]‧]+/g;
 const SIM_VAR = [['레이더','레이다'],['밴드','대역'],['빔형성','빔포밍'],['도플라','도플러'],['어레이','배열']];
 const SIM_AXES = [['플랫폼',['platform']],['핵심기술',['technology']],['기능',['target','performance']],['운용조건',['environment']]];
-const SIM_CAT_FACTOR = 0.75, SIM_FLAT = new Set(['Performance']), SIM_LEX_K = 200, SIM_TOP = 20;
+const SIM_CAT_FACTOR = 0.75, SIM_FLAT = new Set(['Performance']), SIM_LEX_K = 200, SIM_TOP = 20, SIM_NEAR_MIN = 3;
 const simHangul = ch => ch >= '가' && ch <= '힣';
 const simAlnum = ch => /[a-z0-9]/.test(ch);
 function simNorm(t){
@@ -3487,7 +3487,10 @@ function simPrep(lite, idx, nb, grade){
   const C = lite.concepts;
   Object.assign(SIM, {C, idx, nb, grade, anc:new Map(), depth:new Map(), pos:new Map(), byConcept:new Map(),
     gramPos:new Map(idx.grams.map((g,k)=>[g,k])), scale: idx.scale || 1000,
-    w: idx.weights || {concept:0.3, lexical:0.5, axis:0.2}});
+    w: idx.weights || {concept:0.3, lexical:0.5, axis:0.2},
+    // 약한 근거(흔한 성능·환경·플랫폼) 개념의 무게 · 과제가 거의 없는 질의 개념은 이웃 개념까지 후보로 (tools/browser_sim.py 와 같음)
+    weak: (idx.scoring || {}).weak_weight ?? 1, near: !!(idx.scoring || {}).near_candidates, kids:new Map()});
+  C.forEach((r,i)=>r[4].forEach(b=>{ if(!SIM.kids.has(b)) SIM.kids.set(b, []); SIM.kids.get(b).push(i); }));
   idx.ids.forEach((id,d)=>SIM.pos.set(id, d));
   SIM.nbPos = new Map((nb.ids || []).map((id,n)=>[id, n]));    // 정밀 목록은 엔진 분석 과제(10대 분야)만 — 순서가 따로
   SIM.axisOv = new Map(Object.entries(lite.axis || {}).map(([k,v])=>[+k, v]));   // 분류와 다른 축으로 셀 개념(영상·제어 링크 → 기능)
@@ -3541,19 +3544,31 @@ function simWup(a, b){
   if(SIM.C[c][6].includes('c') || (!fc && (fa || fb))) w *= SIM_CAT_FACTOR;               // 자동 갈래를 거친 짝은 약하게
   return w;
 }
+function simW(c){ return SIM.C[c][6].includes('w') ? SIM.weak : 1; }
+// c 와 가까운 개념 — 상위(최상위·갈래 제외), 자기·부모 아래 두 단계. 약한 근거 개념은 넓히지 않음
+function simNear(c){
+  if(SIM.C[c][6].includes('w')) return [c];
+  const ok = x=>SIM.C[x][4].length && !SIM.C[x][6].includes('c');
+  const out = new Set([c]);
+  simAnc(c).forEach((_,a)=>{ if(ok(a)) out.add(a); });
+  [c, ...SIM.C[c][4].filter(ok)].forEach(r=>(SIM.kids.get(r)||[]).forEach(k=>{
+    if(!ok(k)) return; out.add(k); (SIM.kids.get(k)||[]).forEach(g=>{ if(ok(g)) out.add(g); }); }));
+  return [...out];
+}
 function simConcept(q, d){
   if(!q.length || !d.length) return [q.length || d.length ? 0 : null, []];
   const ds = new Set(d), both = q.filter(x=>ds.has(x));
-  let total = both.length;
+  let total = both.reduce((a,x)=>a+simW(x), 0);
   const rq = q.filter(x=>!ds.has(x)), bs = new Set(both), rd = d.filter(x=>!bs.has(x));
   if(rq.length && rd.length){
     const cand = [];
     rq.forEach((x,i)=>rd.forEach((y,j)=>{ const s = simWup(x,y); if(s > 0) cand.push([s,i,j]); }));
     cand.sort((a,b)=>b[0]-a[0] || b[1]-a[1] || b[2]-a[2]);
     const uq = new Set(), ud = new Set();
-    cand.forEach(([s,i,j])=>{ if(!uq.has(i) && !ud.has(j)){ uq.add(i); ud.add(j); total += s; } });
+    cand.forEach(([s,i,j])=>{ if(!uq.has(i) && !ud.has(j)){ uq.add(i); ud.add(j); total += s * (simW(rq[i]) + simW(rd[j])) / 2; } });
   }
-  return [2 * total / (q.length + d.length), both];
+  const den = q.reduce((a,x)=>a+simW(x), 0) + d.reduce((a,x)=>a+simW(x), 0);
+  return [2 * total / den, both];
 }
 function simAxisOf(c){ return SIM.axisOv.get(c) || (SIM_AXES.find(([n, f])=>f.includes(SIM.C[c][5])) || [])[0]; }
 function simAxis(q, d){
@@ -3564,8 +3579,11 @@ function simAxis(q, d){
     const hit = qg.filter(x=>ds.has(x) || d.some(y=>simAnc(y).has(x) || simAnc(x).has(y))).length;
     rates[name] = hit / qg.length;
   });
-  const v = Object.values(rates);
-  return [v.length ? v.reduce((a,b)=>a+b, 0) / v.length : null, rates];
+  const names = Object.keys(rates);
+  if(!names.length) return [null, rates];
+  // 축의 질의 개념이 모두 약한 근거면(대개 플랫폼 축) 그 축은 SIM.weak 만큼만
+  const aw = n=>q.filter(x=>simAxisOf(x) === n).every(x=>SIM.C[x][6].includes('w')) ? SIM.weak : 1;
+  return [names.reduce((a,n)=>a + rates[n]*aw(n), 0) / names.reduce((a,n)=>a + aw(n), 0), rates];
 }
 function simLexical(text){
   const w = new Map(); let n = 0;
@@ -3603,7 +3621,10 @@ function simUnknown(q, taken){
 function simSearch(q){
   const qc = simFind(q), lex = simLexical(q);
   const cands = new Set([...lex].sort((a,b)=>b[1]-a[1]).slice(0, SIM_LEX_K).map(x=>x[0]));
-  qc.forEach(c=>(SIM.byConcept.get(c)||[]).forEach(d=>cands.add(d)));
+  qc.forEach(c=>{
+    const sparse = SIM.near && (SIM.byConcept.get(c)||[]).length < SIM_NEAR_MIN;   // 과제가 거의 없는 개념만 이웃으로 넓힘
+    (sparse ? simNear(c) : [c]).forEach(n=>(SIM.byConcept.get(n)||[]).forEach(d=>cands.add(d)));
+  });
   const W = SIM.w, out = [];
   cands.forEach(d=>{
     const pi = pidx(SIM.idx.ids[d]);
