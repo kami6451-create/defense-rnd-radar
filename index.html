@@ -611,10 +611,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610041021', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610041051', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610041021';
+    window.__DATA_V = '202610041051';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3476,8 +3476,8 @@ async function loadSim(){
     throw new Error(f + ' 을(를) 불러오지 못함');
   };
   try {
-    const [lite, idx, nb, grade] = await Promise.all(['ontology_lite.json','sim_index.json','neighbors.json','grade.json'].map(get));
-    simPrep(lite, idx, nb, grade); SIM.st = 'ok';
+    const [lite, idx, nb, grade, gradeB] = await Promise.all(['ontology_lite.json','sim_index.json','neighbors.json','grade.json','grade_browser.json'].map(get));
+    simPrep(lite, idx, nb, grade); SIM.gradeB = gradeB; SIM.st = 'ok';
   } catch(e) { SIM.st = 'err'; SIM.err = String(e.message || e); }
   if(ideaState){ ideaState.sim = null; drawIdea(); }
   if(openDetail.size) render();
@@ -3489,6 +3489,8 @@ function simPrep(lite, idx, nb, grade){
     gramPos:new Map(idx.grams.map((g,k)=>[g,k])), scale: idx.scale || 1000,
     w: idx.weights || {concept:0.3, lexical:0.5, axis:0.2}});
   idx.ids.forEach((id,d)=>SIM.pos.set(id, d));
+  SIM.nbPos = new Map((nb.ids || []).map((id,n)=>[id, n]));    // 정밀 목록은 엔진 분석 과제(10대 분야)만 — 순서가 따로
+  SIM.axisOv = new Map(Object.entries(lite.axis || {}).map(([k,v])=>[+k, v]));   // 분류와 다른 축으로 셀 개념(영상·제어 링크 → 기능)
   idx.tags.forEach((tags,d)=>tags.forEach(c=>{ if(!SIM.byConcept.has(c)) SIM.byConcept.set(c, []); SIM.byConcept.get(c).push(d); }));
   const seen = new Map();                   // 정규화 이름 → [개념, 영문인가, 낱말 첫머리에서만인가]
   C.forEach((r,i)=>{
@@ -3514,7 +3516,9 @@ function simFind(text){
       s = flat.indexOf(key, s + 1);
     }
   }
-  return [...new Set(found.sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(x=>x[1]))];
+  const ids = [...new Set(found.sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(x=>x[1]))];
+  ids.taken = taken;                         // 글자마다 개념이 차지했는가 — '인식되지 않은 낱말' 에 씀
+  return ids;
 }
 function simAnc(c){
   let m = SIM.anc.get(c);
@@ -3551,10 +3555,11 @@ function simConcept(q, d){
   }
   return [2 * total / (q.length + d.length), both];
 }
+function simAxisOf(c){ return SIM.axisOv.get(c) || (SIM_AXES.find(([n, f])=>f.includes(SIM.C[c][5])) || [])[0]; }
 function simAxis(q, d){
   const ds = new Set(d), rates = {};
-  SIM_AXES.forEach(([name, facets])=>{
-    const qg = q.filter(x=>facets.includes(SIM.C[x][5]));
+  SIM_AXES.forEach(([name])=>{
+    const qg = q.filter(x=>simAxisOf(x) === name);
     if(!qg.length) return;
     const hit = qg.filter(x=>ds.has(x) || d.some(y=>simAnc(y).has(x) || simAnc(x).has(y))).length;
     rates[name] = hit / qg.length;
@@ -3572,8 +3577,29 @@ function simLexical(text){
     for(let j=0; j<p.length; j+=2) acc.set(p[j], (acc.get(p[j])||0) + qv * p[j+1] / SIM.scale); });
   return acc;
 }
-function simGrade(s){ const g = SIM.grade; return s >= g.high ? ['h','높음'] : s >= g.mid ? ['m','중간'] : ['l','낮음']; }
-function simBadge(s){ const [c,t] = simGrade(s); return `<span class="gb ${c}" title="서버 엔진 후보 쌍 점수 중 상위 1% 이상 높음 · 5% 이상 중간">${t}</span>`; }
+// 등급 — 정밀 목록(서버 엔진 점수)은 grade.json, 빠른 분석(브라우저 점수)은 grade_browser.json. 점수식이 달라 경계도 따로
+function simGrade(s, g){ return s >= g.high ? ['h','높음'] : s >= g.mid ? ['m','중간'] : ['l','낮음']; }
+function simBadge(s, quick){
+  const [c,t] = simGrade(s, quick ? SIM.gradeB : SIM.grade);
+  const why = quick ? '빠른 분석 점수(낱말·개념)의 후보 쌍 분포' : '의미 분석(서버 엔진) 점수의 후보 쌍 분포';
+  return `<span class="gb ${c}" title="${why}에서 상위 1% 이상 높음 · 5% 이상 중간">${t}</span>`;
+}
+// 개념으로 잡히지 않은 낱말 — 띄어 쓴 낱말마다, 조사를 떼고 흔한 말(IDEA_STOP)은 빼고
+function simUnknown(q, taken){
+  const out = [];
+  let off = 0;
+  String(q||'').normalize('NFKC').split(/\s+/).forEach(tok=>{
+    const n = simNorm(tok).length, span = taken.slice(off, off + n);
+    off += n;
+    let w = tok.toLowerCase().replace(/[^가-힣a-z0-9]+/g, '');
+    if(/[가-힣]/.test(w)){ const s = w.replace(JOSA, ''); if(s.length >= 2) w = s; }
+    // '적용된'·'않는' 같은 꾸밈말 끝은 뺌 — 뜻을 담은 낱말('끊기지')은 남김
+    if(!n || span.some(Boolean) || w.length < 2 || IDEA_STOP.has(w) || /^\d+$/.test(w) || out.includes(w)
+       || /^(않|없|있|되|하)[는은다]$/.test(w) || /(된|되는|되어|하는|해서|하여|시키는)$/.test(w)) return;
+    out.push(w);
+  });
+  return out;
+}
 function simSearch(q){
   const qc = simFind(q), lex = simLexical(q);
   const cands = new Set([...lex].sort((a,b)=>b[1]-a[1]).slice(0, SIM_LEX_K).map(x=>x[0]));
@@ -3589,7 +3615,7 @@ function simSearch(q){
     out.push({d, pi, total: den ? parts.reduce((a,[w,v])=>a+w*v, 0) / den : 0, con, lx, ax, rates, shared});
   });
   out.sort((a,b)=>b.total-a.total || a.d-b.d);
-  return {q, qc, all: out, top: out.slice(0, SIM_TOP)};
+  return {q, qc, all: out, top: out.slice(0, SIM_TOP), unknown: simUnknown(q, qc.taken)};
 }
 function simBar(name, v){
   return `<span class="lb"><span>${name}</span><i><b style="width:${v == null ? 0 : Math.round(v*100)}%"></b></i><span>${v == null ? '--' : v.toFixed(2)}</span></span>`;
@@ -3599,9 +3625,11 @@ function simChip(c){
   return r[6].includes('w') ? `<span class="chip-w" title="흔한 성능·환경·플랫폼 — 같아도 같은 기술이라는 근거는 약함">${esc(r[1])}</span>`
                             : `<span class="chip-ov">${esc(r[1])}</span>`;
 }
-function simNeighborsHtml(d){
-  const rows = (SIM.nb.rows[d] || []).map(([j, t, sem, lx, con, ax])=>{
-    const pi = pidx(SIM.idx.ids[j]); if(pi == null) return '';
+function simNeighborsHtml(id){
+  const n = SIM.nbPos.get(id);
+  if(n == null) return '<div class="nblist"><span class="fine" style="margin:0">정밀 분석 대상 아님 — 10대 분야로 분류되지 않은 과제라 의미 분석(서버 엔진) 결과가 없습니다.</span></div>';
+  const rows = (SIM.nb.rows[n] || []).map(([j, t, sem, lx, con, ax])=>{
+    const pi = pidx(SIM.nb.ids[j]); if(pi == null) return '';
     const p = P[pi];
     return `<div class="nb"><span>${simBadge(t)} <span class="mono">${t.toFixed(2)}</span></span><span>${projTitle(p)}</span>`
       + `<small>${esc(String(p.y0||''))} · 의미 ${sem == null ? '--' : sem.toFixed(2)} · 글자 ${lx == null ? '--' : lx.toFixed(2)} · 개념 ${con == null ? '--' : con.toFixed(2)} · 축 ${ax == null ? '--' : ax.toFixed(2)}</small></div>`;
@@ -3612,9 +3640,8 @@ function simDetailHtml(p){
   if(SIM.st === 'run') return '<span class="fine">불러오는 중…</span>';
   if(SIM.st === 'err') return `<span class="fine">유사 과제 자료를 불러오지 못했습니다 (${esc(SIM.err)})</span>`;
   if(SIM.st !== 'ok') return '<button type="button" class="linkbtn" data-simload="1">유사 과제 보기 (의미 분석 자료를 불러옵니다)</button>';
-  const d = SIM.pos.get(p.id) ?? (p.ids||[]).map(x=>SIM.pos.get(x)).find(x=>x != null);
-  if(d == null) return '<span class="fine">유사 과제 분석 대상(10대 분야로 분류된 과제)이 아닙니다.</span>';
-  return simNeighborsHtml(d);
+  const id = [p.id, ...(p.ids||[])].find(x=>SIM.nbPos.has(x)) || p.id;
+  return simNeighborsHtml(id);
 }
 function simHtml(q){
   if(SIM.st === 'run' || !SIM.st) return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine">자료를 불러오는 중…</span></div>`;
@@ -3622,9 +3649,9 @@ function simHtml(q){
   if(!ideaState.sim || ideaState.sim.q !== q) ideaState.sim = simSearch(q);
   const S = ideaState.sim;
   // 축별 커버리지 — 아이디어의 개념을 네 갈래로 나누고, 그 갈래를 다룬 과제 수(후보 전체 · 상위 20건)
-  const present = SIM_AXES.filter(([name, facets])=>S.qc.some(c=>facets.includes(SIM.C[c][5])));
-  const rows = SIM_AXES.map(([name, facets])=>{
-    const cs = S.qc.filter(c=>facets.includes(SIM.C[c][5]));
+  const present = SIM_AXES.filter(([name])=>S.qc.some(c=>simAxisOf(c) === name));
+  const rows = SIM_AXES.map(([name])=>{
+    const cs = S.qc.filter(c=>simAxisOf(c) === name);
     const nAll = S.all.filter(r=>r.rates[name] > 0).length, nTop = S.top.filter(r=>r.rates[name] > 0).length;
     return `<tr><td>${name}</td><td>${cs.length ? cs.map(c=>esc(SIM.C[c][1])).join(', ') : '<span class="fine" style="margin:0">—</span>'}</td>`
       + `<td class="num">${cs.length ? `${nAll.toLocaleString()}건<br><span class="fine" style="margin:0">상위 20 중 ${nTop}</span>` : ''}</td></tr>`;
@@ -3635,17 +3662,18 @@ function simHtml(q){
     : `<p class="meta"><b>개별 기술은 선행 과제 있음 · 조합은 미확인</b> — 네 갈래 중 아이디어에 있는 ${present.length}개를 한꺼번에 다룬 과제는 찾지 못했습니다.</p>`;
   const list = S.top.map(r=>{
     const p = P[r.pi], open = simOpen.has(p.id);
-    return `<div class="simrow" data-simopen="${esc(p.id)}" title="누르면 의미 분석(서버 엔진) 유사 과제 10건"><div>${simBadge(r.total)}<br><span class="simsc">${r.total.toFixed(2)}</span></div><div>`
+    return `<div class="simrow" data-simopen="${esc(p.id)}" title="누르면 의미 분석(서버 엔진) 유사 과제 10건"><div>${simBadge(r.total, true)}<br><span class="simsc">${r.total.toFixed(2)}</span></div><div>`
       + `<p class="ttl">${projTitle(p)}</p><p class="meta">${projLine(p)}</p>`
       + `<div class="lbars">${simBar('개념', r.con)}${simBar('글자', r.lx)}${simBar('축', r.ax)}</div>`
       + (r.shared.length ? `<p class="meta">겹친 개념 ${r.shared.map(simChip).join('')}</p>` : '')
-      + (open ? `<p class="fine" style="margin:6px 0 0">이 과제와 뜻이 가까운 과제 (서버 엔진 — 의미·글자·개념·축)</p>${simNeighborsHtml(r.d)}` : '')
+      + (open ? `<p class="fine" style="margin:6px 0 0">이 과제와 뜻이 가까운 과제 (서버 엔진 — 의미·글자·개념·축)</p>${simNeighborsHtml(SIM.idx.ids[r.d])}` : '')
       + `</div></div>`;
   }).join('');
-  return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine" style="margin:0">— 10대 분야로 분류된 과제 ${SIM.idx.ids.length.toLocaleString()}건 대상 · 개념 ${SIM.C.length.toLocaleString()}개 사전</span>
+  return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine" style="margin:0">— 과제 ${SIM.idx.ids.length.toLocaleString()}건 대상(정밀 분석은 10대 분야 ${SIM.nb.ids.length.toLocaleString()}건) · 개념 ${SIM.C.length.toLocaleString()}개 사전</span>
     <h3>축별 커버리지</h3>
     ${S.qc.length ? `<table class="itable axt"><thead><tr><th>축</th><th>아이디어의 개념</th><th class="num">다룬 과제</th></tr></thead><tbody>${rows}</tbody></table>${combo}`
                   : '<p class="fine" style="margin:4px 0">아이디어에서 온톨로지 개념을 찾지 못했습니다 — 글자 유사도로만 순위를 매깁니다.</p>'}
+    ${S.unknown.length ? `<p class="meta">인식되지 않은 낱말 ${S.unknown.map(w=>`<span class="chip-miss" title="온톨로지 개념으로 잡히지 않음 — 글자 유사도에만 쓰임">${esc(w)}</span>`).join('')}</p>` : ''}
     <h3>가장 비슷한 과제 ${S.top.length}건 <span class="fine" style="margin:0">(개념 ${SIM.w.concept} · 글자 ${SIM.w.lexical} · 축 ${SIM.w.axis})</span></h3>
     ${list || '<p class="empty" style="padding:6px 0">비슷한 과제를 찾지 못했습니다.</p>'}
     <p class="fine">빠른 분석은 낱말·개념 기준이며, 과제를 누르면 의미 분석 결과를 볼 수 있습니다</p>
