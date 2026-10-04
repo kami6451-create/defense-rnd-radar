@@ -624,10 +624,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610041241', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610041354', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610041241';
+    window.__DATA_V = '202610041354';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3610,8 +3610,23 @@ function ctxUnknown(spans){
     out.push(w); });
   return out;
 }
+// 과제가 하나도 없는 개념에 여러 낱말이 묶여 걸렸으면, 그 안의 낱말이 통째로 다른 개념일 때 그것도 연결
+// ('작전명령 자동 생성기' → 명령서 자동 생성 + 작전명령). 과제가 있는 개념은 넓히지 않음('AI 참모' → '참모 업무' 금지)
+function ctxExpandEmpty(spans){
+  const extra = [];
+  spans.forEach(sp=>{
+    if(sp.how !== 'exact' || sp.term == null || !ctxIsConcept(sp.term) || !sp.text.includes(' ') || CTX.T[sp.term][3] > 0) return;
+    sp.text.split(' ').forEach(tok=>{
+      for(const w of new Set([tok, ctxJosa(tok)])){
+        const k = ctxNorm(w), t = CTX.surf.get(k);
+        if(t != null && t !== sp.term && ctxIsConcept(t) && !CTX.generic.has(k)){ extra.push({text:tok, key:k, term:t, how:'sub'}); break; }
+      }
+    });
+  });
+  return spans.concat(extra);
+}
 function ctxSearch(q){
-  const spans = ctxLink(q);
+  const spans = ctxExpandEmpty(ctxLink(q));
   const linked = [...new Set(spans.filter(s=>s.term != null).map(s=>s.term))];            // 맥락 벡터용(흔한 말 포함)
   const terms = [...new Set(spans.filter(s=>s.term != null && s.how !== 'generic').map(s=>s.term))].filter(t=>!ctxGen(t));
   const tech = terms.filter(ctxTech);
