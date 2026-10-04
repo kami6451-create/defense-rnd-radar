@@ -624,10 +624,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610041354', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610041412', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610041354';
+    window.__DATA_V = '202610041412';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3050,6 +3050,18 @@ const IDEA_TOP = 20;           // 겹침 판단에 쓰는 상위 과제 수
 const DEF_ORDER = /국방|방위사업|국방과학|국방기술|육군|해군|공군|해병|합동참모|민군협력|국군/;
 const DEF_FIRM = /한화|LIG|넥스원|현대로템|한국항공우주산업|풍산|현대위아|퍼스텍|빅텍|휴니드|삼양컴텍|SNT|이오시스템|디펜스|방산|유콘시스템|비츠로밀텍|HJ중공업|한화오션|에이치디현대|HD현대/;
 
+// 예전 낱말 결과를 빠른 분석과 같은 기준으로 거름 — 기술어(온톨로지의 기술·대상·탑재체 개념)가 하나라도 같은 과제만.
+// '뿌리'·'이전' 같은 일반 낱말 하나로 엉뚱한 과제를 늘어놓느니 보여 주지 않는 편이 낫다(사용자 기준 2026-10-04).
+// 빠른 분석 자료를 아직 못 받았으면 null.
+function ideaGate(R){
+  if(!R || SIM.st !== 'ok') return null;
+  const S = ctxSearch(R.q), ok = new Set(S.all.map(h=>h.pi)), keep = r=>ok.has(r.i);
+  return Object.assign({}, R, {res: R.res.filter(keep), u: R.u.filter(keep), tech: S.tech});
+}
+function ideaPick(mode, R){
+  const G = mode === 'idea' ? ideaGate(R) : R;
+  return G ? G.res.filter(r=>r.s >= (mode==='idea' ? 0.35 : 0.3)).slice(0, 400) : [];
+}
 function ideaVerdict(R){
   const top = R.u[0];
   const strong = R.u.filter(r=>r.cov >= 0.75);
@@ -3059,6 +3071,7 @@ function ideaVerdict(R){
   if(top && top.cov >= 0.85 && top.cos >= 0.25){ lv='hi'; msg='거의 같은 과제가 이미 있습니다'; }
   else if(strong.length){ lv='hi'; msg=`아이디어의 핵심 요소 대부분(75% 이상)을 담은 과제가 ${strong.length.toLocaleString()}건 있습니다`; }
   else if(top && top.s >= 0.45){ lv='mid'; msg='일부 요소가 겹치는 과제가 있습니다'; }
+  else if(R.tech && !R.tech.length){ lv='lo'; msg='비교할 기술어를 찾지 못했습니다'; }
   else { lv='lo'; msg='공개된 과제 중에는 뚜렷하게 겹치는 과제가 보이지 않습니다'; }
   return {lv, msg, ongoing, near};
 }
@@ -3246,7 +3259,9 @@ function drawIdea(){
   box.innerHTML = mode === 'idea' ? ideaHtml(R) : instHtml(R);
 }
 
-function ideaHtml(R){
+function ideaHtml(R0){
+  const R = ideaGate(R0);
+  if(!R) return `<div class="ib"><div class="verdict lo"><b>비교 자료를 불러오는 중입니다…</b></div>${simHtml(R0.q)}</div>`;
   const V = ideaVerdict(R);
   const top = R.u.slice(0, IDEA_TOP);
   const T = top.length || 1;
@@ -3266,9 +3281,10 @@ function ideaHtml(R){
   const novel = cs.filter(x=>x.st[0]==='nw' || x.st[0]==='rare').map(x=>x.c.t);
   const over = cs.filter(x=>x.st[0]==='ov').map(x=>x.c.t);
   const tips = [];
-  if(V.lv === 'lo') tips.push('공개 과제 기준으로는 새 영역에 가깝습니다. 다만 비공개 과제·진행 중인 사업은 이 자료에 없으니 담당 부서(방위사업청·국방기술진흥연구소)에 확인하십시오.');
-  if(over.length) tips.push(`<b>${over.map(esc).join(', ')}</b> — 이미 여러 과제가 다룬 요소입니다. 아래 과제의 성과를 활용·연계하거나, 운용 환경·성능 목표·대상 플랫폼을 좁혀 차별화하십시오.`);
-  if(novel.length) tips.push(`<b>${novel.map(esc).join(', ')}</b> — 비슷한 과제들에 드물거나 없는 요소입니다. 이 요소를 과제 목표의 중심에 두면 중복을 피하기 쉽습니다.`);
+  if(V.lv === 'lo' && !R.tech.length) tips.push('국방 기술 개념 사전(온톨로지)에 있는 기술어가 아이디어에 없어 비교하지 않았습니다. 낱말만 겹친 과제는 보여 주지 않습니다. 핵심 기술·대상·탑재 플랫폼을 구체적으로 적어 주세요.');
+  else if(V.lv === 'lo') tips.push('공개 과제 기준으로는 새 영역에 가깝습니다. 다만 비공개 과제·진행 중인 사업은 이 자료에 없으니 담당 부서(방위사업청·국방기술진흥연구소)에 확인하십시오.');
+  if(R.tech.length && over.length) tips.push(`<b>${over.map(esc).join(', ')}</b> — 이미 여러 과제가 다룬 요소입니다. 아래 과제의 성과를 활용·연계하거나, 운용 환경·성능 목표·대상 플랫폼을 좁혀 차별화하십시오.`);
+  if(R.tech.length && novel.length) tips.push(`<b>${novel.map(esc).join(', ')}</b> — 비슷한 과제들에 드물거나 없는 요소입니다. 이 요소를 과제 목표의 중심에 두면 중복을 피하기 쉽습니다.`);
   if(V.ongoing.length){
     const who = [...new Set(V.ongoing.map(r=>(P[r.i].insts&&P[r.i].insts[0])||P[r.i].inst).filter(Boolean))].slice(0,3);
     tips.push(`현재 <b>진행 중인 과제 ${V.ongoing.length}건</b>과 겹칩니다${who.length?` (${who.map(esc).join(', ')} 등)`:''}. 중복 투자로 지적될 수 있으니 수행기관과 먼저 협의하거나 후속·연계 과제로 설계하십시오.`);
@@ -3310,10 +3326,10 @@ function ideaHtml(R){
     ${syn.length ? `<p class="fine">같은 뜻으로 함께 찾은 말: ${syn.join(' · ')}</p>` : ''}
     ${tips.length ? `<h3>검토 의견</h3><ul>${tips.map(t=>`<li>${t}</li>`).join('')}</ul>` : ''}
     <h3>가장 비슷한 과제 ${Math.min(10, top.length)}건</h3>
-    ${list || '<p class="empty" style="padding:6px 0">겹치는 요소가 하나라도 있는 과제가 없습니다.</p>'}
+    ${list || '<p class="empty" style="padding:6px 0">맥락이 맞는 기존 과제를 찾지 못했습니다 — 기술어가 겹치지 않고 낱말만 겹친 과제는 보여 주지 않습니다.</p>'}
     ${areaLine ? `<h3>들어갈 전략기술 분야 (추정)</h3><p class="meta">${areaLine}</p>` : ''}
     ${insts.length ? `<h3>협력·자문을 검토할 기관 (역량 점수 순)</h3><p class="meta">${insts.map(x=>`<a href="#" data-goinst="${esc(x.name)}">${esc(x.name)}</a> ${x.n}건${x.why.length ? ` <span class="fine" style="margin:0">(${x.why.slice(0,2).map(esc).join(', ')})</span>` : ''}`).join(' · ')}</p>` : ''}
-    <p class="fine">유사도는 글자·낱말로 계산한 값입니다(뜻은 비교하지 않음). 공개된 과제만 비교하므로 비공개 과제는 잡히지 않습니다.
+    <p class="fine">유사도는 글자·낱말로 계산한 값입니다(뜻은 비교하지 않음). 기술어가 하나라도 겹친 과제만 보여 줍니다. 공개된 과제만 비교하므로 비공개 과제는 잡히지 않습니다.
     아래 차트·목록은 이 아이디어와 비슷한 과제 ${ideaState.hitN.toLocaleString()}건 기준으로 바뀌었습니다.
     <button type="button" class="linkbtn" data-ideaclr="1">전체 보기로 돌아가기</button></p>
   </div>`;
@@ -3486,6 +3502,12 @@ async function loadSim(){
     simPrep(lite, idx, nb, grade); SIM.gradeB = gradeB;
     ctxPrep(meta, gen, kv, pv); SIM.st = 'ok';
   } catch(e) { SIM.st = 'err'; SIM.err = String(e.message || e); }
+  if(ideaState && ideaState.mode === 'idea' && ideaState.R){        // 기술어 기준으로 차트·목록을 다시 거름
+    const pick = ideaPick('idea', ideaState.R);
+    ideaState.hitN = pick.length; hits = pick.map(r=>({i:r.i, s:r.s}));
+    if(searchInfo) searchInfo.n = pick.length;
+    render();
+  }
   if(ideaState){ ideaState.sim = null; drawIdea(); }
   if(openDetail.size) render();
   return SIM.st === 'ok';
@@ -3747,7 +3769,7 @@ function runIdea(mode){
   const q = document.getElementById('q').value.trim();
   if(!q){ ideaState = null; hits = null; searchInfo = null; drawIdea(); render(); return; }
   const R = ideaSearch(q);
-  const pick = R ? R.res.filter(r=>r.s >= (mode==='idea' ? 0.35 : 0.3)).slice(0, 400) : [];
+  const pick = ideaPick(mode, R);                 // 아이디어 점검은 빠른 분석 자료가 오면 다시 거름(loadSim)
   ideaState = {mode, R, hitN: pick.length};
   // 차트·목록도 이 아이디어와 비슷한 과제 기준으로 — 분야별 현황·연도 흐름을 그 주제로 볼 수 있게
   hits = R ? pick.map(r=>({i:r.i, s:r.s})) : null;
