@@ -624,10 +624,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610050134', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610052253', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610050134';
+    window.__DATA_V = '202610052253';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -3055,9 +3055,11 @@ const DEF_FIRM = /한화|LIG|넥스원|현대로템|한국항공우주산업|풍
 // 빠른 분석 자료를 아직 못 받았으면 null.
 function ideaGate(R){
   if(!R || SIM.st !== 'ok') return null;
-  const S = ctxSearch(R.q), ok = new Set(S.all.map(h=>h.pi)), keep = r=>ok.has(r.i);
+  const S = ctxSearch(R.q, ideaMust(R.q)), ok = new Set(S.all.map(h=>h.pi)), keep = r=>ok.has(r.i);
   return Object.assign({}, R, {res: R.res.filter(keep), u: R.u.filter(keep), tech: S.tech});
 }
+// 지금 질의에서 고른 '꼭 들어가야 할 낱말' (질의가 바뀌면 없음)
+function ideaMust(q){ return ideaState && ideaState.R && ideaState.R.q === q && ideaState.must ? ideaState.must : null; }
 function ideaPick(mode, R){
   const G = mode === 'idea' ? ideaGate(R) : R;
   return G ? G.res.filter(r=>r.s >= (mode==='idea' ? 0.35 : 0.3)).slice(0, 400) : [];
@@ -3486,6 +3488,7 @@ const simOpen = new Set();                 // 정밀 유사 과제를 펼친 결
 const SIM_VAR = [['레이더','레이다'],['밴드','대역'],['빔형성','빔포밍'],['도플라','도플러'],['어레이','배열']];
 const SIM_AXES = [['플랫폼',['platform']],['핵심기술',['technology']],['기능',['target','performance']],['운용조건',['environment']]];
 const SIM_TOP = 20, CTX_SPAN = 4, CTX_FUZZY = 0.75, CTX_W = {cos:0.5, dice:0.3, axis:0.2};
+const CTX_NEED = 2;          // 질의의 기술어(핵심 단어)를 몇 개 이상 가져야 하나 (2026-10-05 교수님 "반드시 2개 이상의 핵심 단어")
 async function loadSim(){
   if(SIM.st) return SIM.st === 'ok';
   SIM.st = 'run';
@@ -3649,12 +3652,16 @@ function ctxExpandEmpty(spans){
   });
   return spans.concat(extra);
 }
-function ctxSearch(q){
+// must: 꼭 들어가야 할 기술어(화면에서 누른 것) — 하나라도 없는 과제는 뺌
+function ctxSearch(q, must){
   const spans = ctxExpandEmpty(ctxLink(q));
   const linked = [...new Set(spans.filter(s=>s.term != null).map(s=>s.term))];            // 맥락 벡터용(흔한 말 포함)
   const terms = [...new Set(spans.filter(s=>s.term != null && s.how !== 'generic').map(s=>s.term))].filter(t=>!ctxGen(t));
   const tech = terms.filter(ctxTech);
-  const res = {q, spans, terms, tech, qc:[], all:[], top:[], unknown: ctxUnknown(spans), nCands: 0};
+  const mustT = new Set([...(must || [])].filter(t=>tech.includes(t)));
+  const need = Math.min(CTX_NEED, tech.length);   // 질의에 기술어가 하나뿐이면 그 하나
+  const res = {q, spans, terms, tech, need, must: mustT, mk: [...mustT].sort((a,b)=>a-b).join(','),
+    qc:[], all:[], top:[], unknown: ctxUnknown(spans), nCands: 0};
   if(!tech.length) return res;                   // 일반어만 있는 질의 — 결과를 내지 않음
   const D = CTX.D, qv = new Float64Array(D);
   let sw = 0;
@@ -3670,6 +3677,8 @@ function ctxSearch(q){
     const pi = pidx(SIM.idx.ids[d]);
     if(pi == null || dropped.has(P[pi].id)) return;
     const pt = CTX.pt[d].filter(t=>!ctxGen(t)), ps = new Set(pt);
+    if(tech.filter(t=>ps.has(t)).length < need) return;                              // 핵심 단어 2개 이상
+    for(const t of mustT) if(!ps.has(t)) return;                                      // 꼭 들어가야 할 낱말
     const m = terms.filter(t=>ps.has(t));
     let dot = 0; for(let k=0; k<D; k++) dot += CTX.Pc[d*D+k] * qv[k];
     const cos = dot / (CTX.Pn[d] * qn);
@@ -3718,11 +3727,27 @@ function simDetailHtml(p){
 function simHtml(q){
   if(SIM.st === 'run' || !SIM.st) return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine">자료를 불러오는 중…</span></div>`;
   if(SIM.st === 'err') return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine">자료를 불러오지 못했습니다 (${esc(SIM.err)})</span></div>`;
-  if(!ideaState.sim || ideaState.sim.q !== q) ideaState.sim = ctxSearch(q);
+  const must = ideaMust(q), mk = [...(must || [])].sort((a,b)=>a-b).join(',');
+  if(!ideaState.sim || ideaState.sim.q !== q || ideaState.sim.mk !== mk) ideaState.sim = ctxSearch(q, must);
   const S = ideaState.sim;
   // 입력 이해 — 사전에 연결한 낱말(기술어 굵게 · 일반어 흐리게) · 흔한 말 · 인식되지 않은 낱말
   const gens = [...new Set(S.spans.filter(s=>s.how === 'generic' && s.key.length >= 2 && !/^\d+$/.test(s.key)).map(s=>s.key))];
-  const understand = `<p class="meta">연결한 낱말 ${S.terms.length ? S.terms.map(t=>ctxChip(t)).join('') : '<span class="fine" style="margin:0">없음</span>'}</p>`
+  // 핵심 단어(기술어) 단추 — 누르면 '꼭 들어가야 할 낱말', 그 낱말이 없는 과제는 모두 뺌. 숫자는 지금 결과 중 그 낱말이 든 과제 수
+  const coreBtns = S.tech.map(t=>{
+    const on = S.must.has(t), n = S.all.filter(h=>h.matched.includes(t)).length, c = CTX.T[t][2];
+    const typed = [...new Set(S.spans.filter(s=>s.term === t).map(s=>s.text))].filter(x=>ctxNorm(x) !== ctxNorm(CTX.T[t][0]));
+    const alts = c >= 0 ? SIM.C[c][3].slice(0, 8) : [];
+    return `<button type="button" class="ghost" data-must="${t}" aria-pressed="${on}" style="margin:2px 4px 2px 0"`
+      + ` title="${esc((on ? '꼭 들어가야 할 낱말 — 다시 누르면 풂' : '누르면 이 낱말이 없는 과제는 모두 뺌') + (alts.length ? ' · 같은 말: ' + alts.join(' · ') : ''))}">`
+      + `${on ? '✓ ' : ''}<b>${esc(CTX.T[t][0])}</b>${typed.length ? ` <small>${esc(typed.join('·'))}</small>` : ''} <span class="fine" style="margin:0">${n.toLocaleString()}</span></button>`;
+  }).join('');
+  const others = S.terms.filter(t=>!ctxTech(t));
+  const understand = (S.tech.length
+      ? `<p class="meta" style="margin-bottom:2px">핵심 단어 ${coreBtns}</p>`
+        + `<p class="fine" style="margin:2px 0">${S.tech.length >= CTX_NEED ? `핵심 단어 ${S.tech.length}개 중 <b>${S.need}개 이상</b>이 같은 과제만 보여 줍니다.` : '핵심 단어가 하나라 그 낱말이 든 과제를 보여 줍니다.'}`
+        + ` 꼭 들어가야 할 낱말을 누르면 그 낱말이 없는 과제는 모두 뺍니다${S.must.size ? ` (지금 ${S.must.size}개 고름)` : ''}. 숫자는 지금 결과 중 그 낱말이 든 과제 수.</p>`
+      : `<p class="meta">핵심 단어 <span class="fine" style="margin:0">없음</span></p>`)
+    + (others.length ? `<p class="meta">함께 쓴 낱말 ${others.map(t=>ctxChip(t)).join('')} <span class="fine" style="margin:0">(일반 낱말 — 순위에만 씀)</span></p>` : '')
     + (gens.length ? `<p class="fine" style="margin:2px 0">흔한 말이라 뺌: ${gens.map(esc).join(' · ')}</p>` : '')
     + (S.unknown.length ? `<p class="meta">인식되지 않은 낱말 ${S.unknown.map(w=>`<span class="chip-miss" title="낱말 사전(개념·과제 키워드)에 같은 꼴이 없음 — 판단에 쓰지 않음">${esc(w)}</span>`).join('')}</p>` : '');
   // 축별 커버리지 — 아이디어의 개념을 네 갈래로 나누고, 그 갈래를 다룬 과제 수(관문 통과 전체 · 상위 20건)
@@ -3747,16 +3772,17 @@ function simHtml(q){
       + `</div></div>`;
   }).join('');
   const none = !S.tech.length ? '맥락이 맞는 기존 과제를 찾지 못했습니다 — 입력에서 기술어(온톨로지의 기술·대상·탑재체 개념)를 찾지 못했습니다. 일반 낱말만 겹친 과제는 보여 주지 않습니다.'
-    : '맥락이 맞는 기존 과제를 찾지 못했습니다 — 같은 기술어를 가진 과제가 없습니다.';
+    : S.must.size ? '고른 낱말을 모두 가진 과제가 없습니다 — 단추를 다시 눌러 풀어 보십시오.'
+    : `맥락이 맞는 기존 과제를 찾지 못했습니다 — 핵심 단어를 ${S.need}개 이상 함께 가진 과제가 없습니다.`;
   return `<div class="simq"><b>온톨로지 빠른 분석</b> <span class="fine" style="margin:0">— 과제 ${SIM.idx.ids.length.toLocaleString()}건 대상(정밀 분석은 10대 분야 ${SIM.nb.ids.length.toLocaleString()}건) · 낱말 사전 ${CTX.surf.size.toLocaleString()}개</span>
     <h3>입력 이해</h3>
     ${understand}
     <h3>축별 커버리지</h3>
     ${S.qc.length ? `<table class="itable axt"><thead><tr><th>축</th><th>아이디어의 개념</th><th class="num">다룬 과제</th></tr></thead><tbody>${rows}</tbody></table>${combo}`
                   : '<p class="fine" style="margin:4px 0">아이디어에서 온톨로지 개념을 찾지 못했습니다.</p>'}
-    <h3>${S.top.length ? `기술어가 겹친 과제 ${S.all.length > S.top.length ? `${S.all.length.toLocaleString()}건 중 상위 ${S.top.length}건` : `${S.top.length}건`}` : '기술어가 겹친 과제'} <span class="fine" style="margin:0">(순위: 맥락 ${CTX_W.cos} · 낱말 묶음 ${CTX_W.dice} · 축 ${CTX_W.axis})</span></h3>
+    <h3>${S.top.length ? `핵심 단어가 ${S.need}개 이상 같은 과제 ${S.all.length > S.top.length ? `${S.all.length.toLocaleString()}건 중 상위 ${S.top.length}건` : `${S.top.length}건`}` : '핵심 단어가 같은 과제'} <span class="fine" style="margin:0">(순위: 맥락 ${CTX_W.cos} · 낱말 묶음 ${CTX_W.dice} · 축 ${CTX_W.axis})</span></h3>
     ${list || `<p class="empty" style="padding:6px 0">${none}</p>`}
-    <p class="fine">빠른 분석은 기술어(굵은 낱말)가 하나라도 겹친 과제만 보여 주고, 부대·용역·연구 같은 일반 낱말만 겹친 과제는 보여 주지 않습니다. 순위는 맥락·낱말 묶음·축으로 매깁니다. 과제를 누르면 의미 분석 결과를 볼 수 있습니다</p>
+    <p class="fine">빠른 분석은 핵심 단어(기술어)가 2개 이상 겹친 과제만 보여 주고(핵심 단어가 하나면 그 하나), 부대·용역·연구 같은 일반 낱말만 겹친 과제는 보여 주지 않습니다. 순위는 맥락·낱말 묶음·축으로 매깁니다. 과제를 누르면 의미 분석 결과를 볼 수 있습니다</p>
   </div>`;
 }
 // ---------- 국방 R&D 밖 과제 (2026-10-04) ----------
@@ -3832,6 +3858,16 @@ function outsideHtml(q){
 document.addEventListener('click', e=>{
   const ld = e.target.closest('[data-simload]');
   if(ld){ e.preventDefault(); loadSim(); render(); if(ideaState) drawIdea(); return; }
+  const mu = e.target.closest('#ideabox [data-must]');
+  if(mu && ideaState){
+    const t = +mu.dataset.must;
+    ideaState.must.has(t) ? ideaState.must.delete(t) : ideaState.must.add(t);
+    ideaState.sim = null;                                       // 빠른 분석·예전 목록·차트를 고른 낱말 기준으로 다시
+    const pick = ideaPick(ideaState.mode, ideaState.R);
+    ideaState.hitN = pick.length; hits = pick.map(r=>({i:r.i, s:r.s}));
+    if(searchInfo) searchInfo.n = pick.length;
+    drawIdea(); render(); return;
+  }
   const so = e.target.closest('#ideabox [data-simopen]');
   if(so && !e.target.closest('a,button')){ const id = so.dataset.simopen; simOpen.has(id) ? simOpen.delete(id) : simOpen.add(id); drawIdea(); }
 });
@@ -3842,8 +3878,10 @@ function runIdea(mode){
   const q = document.getElementById('q').value.trim();
   if(!q){ ideaState = null; hits = null; searchInfo = null; drawIdea(); render(); return; }
   const R = ideaSearch(q);
+  const keepMust = ideaState && ideaState.R && R && ideaState.R.q === R.q && ideaState.must ? ideaState.must : new Set();
+  ideaState = {mode, R, hitN: 0, must: keepMust};
   const pick = ideaPick(mode, R);                 // 아이디어 점검은 빠른 분석 자료가 오면 다시 거름(loadSim)
-  ideaState = {mode, R, hitN: pick.length};
+  ideaState.hitN = pick.length;
   // 차트·목록도 이 아이디어와 비슷한 과제 기준으로 — 분야별 현황·연도 흐름을 그 주제로 볼 수 있게
   hits = R ? pick.map(r=>({i:r.i, s:r.s})) : null;
   searchInfo = R ? {mode, words: R.concepts.map(c=>c.t), counts: [], n: pick.length} : null;
