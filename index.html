@@ -370,6 +370,9 @@ body{overflow-x:hidden}
 .idetail .dsc{color:var(--muted);font-size:12px;display:block}
 .ilinks{font-size:12.5px;margin:6px 0 2px}
 .ilinks a,.ilinks button{margin-right:10px}
+.ntisbox{margin:8px 0 4px;font-size:13px;color:var(--muted)}
+.ntisbtn{display:inline-block;padding:7px 12px;margin:6px 8px 0 0;border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:13px;font-weight:600;text-decoration:none}
+.ntisbtn.sub{border-color:var(--rule-strong);color:var(--muted);font-weight:400}
 .acards{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px;margin-bottom:6px}
 .acard{border:1px solid var(--rule);border-top:3px solid var(--c);border-radius:3px;padding:9px 12px 8px;cursor:pointer;background:var(--panel)}
 .acard:hover{border-color:var(--rule-strong);border-top-color:var(--c)}
@@ -624,10 +627,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610052253', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610052312', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610052253';
+    window.__DATA_V = '202610052312';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -2215,18 +2218,21 @@ function render(){
                    hidden ? `필터로 가린 ${hidden.toLocaleString()}건` : ''].filter(Boolean);
       QN.innerHTML = `친 말이 <b>모두</b> 든 과제 <b>${idx.length.toLocaleString()}건</b>`
         + (why.length ? ` <span style="color:var(--faint)">(전체 ${all.toLocaleString()}건 중 ${why.join(' · ')} 제외)</span>` : '')
-        + (searchInfo.words.length>1 ? ` · 낱말별로는 ${cnt}` : '');
+        + (searchInfo.words.length>1 ? ` · 낱말별로는 ${cnt}` : '')
+        + ntisLinks(searchInfo.words.join(' '), idx.length ? '국가R&amp;D 전체(NTIS)에서도 같은 낱말로 찾아보기 —' : '조건에 맞는 과제가 없습니다 — 국가R&amp;D 전체(NTIS)에서 같은 낱말로 찾아보십시오.');
     } else if(searchInfo.mode==='none'){
       const zero = searchInfo.counts.filter(c=>!c.n).map(c=>`'${esc(c.w)}'`);
       QN.innerHTML = `친 말이 <b>모두</b> 든 과제는 <b>없습니다</b>. `
         + (zero.length ? `${zero.join('·')} 은(는) 아예 안 나옵니다. ` : '')
         + `<br>낱말별로는 ${cnt}`
         + (searchInfo.alt ? `<br><button type="button" class="sortbtn" data-loose="1">`
-          + `글자가 비슷한 과제 ${searchInfo.alt}건 보기 (정확히 맞는 것 아님)</button>` : '');
+          + `글자가 비슷한 과제 ${searchInfo.alt}건 보기 (정확히 맞는 것 아님)</button>` : '')
+        + ntisLinks(searchInfo.words.join(' '));
     } else {
       QN.innerHTML = `친 말이 <b>모두</b> 든 과제는 없어서, <b>글자가 비슷한</b> 과제 `
         + `${searchInfo.n.toLocaleString()}건을 유사도순으로 보여줍니다. `
-        + `친 말이 들어 있지 않을 수 있습니다.<br>낱말별로는 ${cnt}`;
+        + `친 말이 들어 있지 않을 수 있습니다.<br>낱말별로는 ${cnt}`
+        + ntisLinks(searchInfo.words.join(' '), '친 말이 모두 든 과제는 이 자료에 없습니다 — 국가R&amp;D 전체(NTIS)에서 같은 낱말로 찾아보십시오.');
     }
   }
   syncRvBtn();
@@ -3253,11 +3259,53 @@ function instNameHits(q){
 }
 const ORG_LIKE = /대학|연구원|연구소|재단|협회|공사|공단|센터|주식회사|\(주\)|㈜|기업|테크|시스템|전자|산업|정밀|중공업|에어로|디펜스|로보|솔루션|랩|lab/i;
 
+// ---------- NTIS 에서 찾기 (2026-10-05 교수님 "과제를 찾지 못할 경우 NTIS 에서 검색할 수 있도록 버튼") ----------
+// NTIS 과제 검색·통합검색 결과 화면을 같은 낱말로 엶. 인증키를 쓰지 않는 공개 검색 화면이라 공개판에서도 됨.
+// 보내는 낱말: 입력을 띄어쓰기로 나눠 조사를 떼고, 흔한 말(IDEA_STOP·빠른 분석의 흔한 말)·숫자는 빼고 4개까지 (NTIS 는 모든 낱말이 든 과제를 찾음)
+function ntisWords(q){
+  const out = [];
+  String(q||'').normalize('NFKC').split(/[^0-9A-Za-z가-힣]+/).forEach(w=>{
+    if(!w) return;
+    let b = /[가-힣]/.test(w) ? ctxJosa(w) : w;
+    if(b !== w && /의$/.test(w)) b = ctxJosa(b);            // 겹조사 '로의·과의' — 한 번 더 뗌
+    const k = ctxNorm(b);
+    if(k.length < 2 || /^\d+$/.test(k) || IDEA_STOP.has(k) || (CTX.generic && CTX.generic.has(k)) || (OUT.gen && OUT.gen.has(k))) return;
+    if(!out.some(x=>ctxNorm(x) === k)) out.push(b);
+  });
+  return out.slice(0, 4);
+}
+// phrases: 빠른 분석이 묶어 알아본 말('AI 참모' 처럼 띄어 쓴 한 낱말)을 그대로 보낼 때. 없으면 입력을 낱말로 나눔
+function ntisLinks(q, lead, phrases){
+  const w = (phrases && phrases.length ? phrases : ntisWords(q)).slice(0, 4);
+  if(!w.length) return '';
+  const s = w.join(' '), url = x=>'https://www.ntis.go.kr/ThSearchProjectList.do?searchWord=' + encodeURIComponent(x);
+  // NTIS 는 모든 낱말이 든 과제를 찾아서 낱말이 많으면 0건이 되기 쉬움 — 하나씩 찾는 길도 둠
+  const one = w.length > 1 ? `<br><span class="fine" style="margin:0">하나씩 찾기:</span> `
+    + w.map(x=>`<a href="${esc(url(x))}" target="_blank" rel="noopener">${esc(x)}</a>`).join(' · ') : '';
+  return `<div class="ntisbox">${lead || '이 자료에서 찾지 못했습니다 — 국가R&amp;D 전체(NTIS)에서 같은 낱말로 찾아보십시오.'}<br>`
+    + `<a class="ntisbtn" href="${esc(url(s))}" target="_blank" rel="noopener">NTIS 과제 검색: ${esc(s)} ↗</a>`
+    + `<a class="ntisbtn sub" href="https://www.ntis.go.kr/ThSearchTotalList.do?searchWord=${encodeURIComponent(s)}" target="_blank" rel="noopener">NTIS 통합검색(논문·특허·보고서 포함) ↗</a>`
+    + one + `</div>`;
+}
+// 빠른 분석이 알아본 말 — 연결된 말(묶음은 그대로, 끝 조사 뗌)과 인식되지 않은 말. 흔한 말은 뺌
+function ctxPhrases(S){
+  const out = [];
+  S.spans.forEach(s=>{
+    if(s.how === 'generic' || s.how === 'sub' || (s.term != null && ctxGen(s.term))) return;
+    const ws = s.text.split(' '), last = ws[ws.length-1];
+    let b = ctxJosa(last);
+    if(b !== last && /의$/.test(last)) b = ctxJosa(b);       // 겹조사 '로의·과의' — 한 번 더 뗌
+    ws[ws.length-1] = b;
+    const p = ws.join(' ');
+    if(ctxNorm(p).length >= 2 && !out.some(x=>ctxNorm(x) === ctxNorm(p))) out.push(p);
+  });
+  return out;
+}
 function drawIdea(){
   const box = document.getElementById('ideabox');
   if(!ideaState){ box.innerHTML = ''; return; }
   const {mode, R} = ideaState;
-  if(!R){ box.innerHTML = `<div class="ib"><p class="empty" style="padding:6px 0">아이디어에서 비교할 낱말을 찾지 못했습니다. 핵심 기술·대상·운용 환경을 낱말로 적어 주세요.</p></div>`; return; }
+  if(!R){ box.innerHTML = `<div class="ib"><p class="empty" style="padding:6px 0">아이디어에서 비교할 낱말을 찾지 못했습니다. 핵심 기술·대상·운용 환경을 낱말로 적어 주세요.</p>${ntisLinks(document.getElementById('q').value)}</div>`; return; }
   box.innerHTML = mode === 'idea' ? ideaHtml(R) : instHtml(R);
 }
 
@@ -3463,6 +3511,8 @@ function instHtml(R){
     ${body ? `<table class="itable"><thead><tr><th>#</th><th>기관 · 대표 과제</th><th class="num">관련 과제</th>
       <th class="num opt">최근 5년</th><th class="num opt">진행 중</th><th class="num opt">국방 발주</th><th class="num">최근 착수</th></tr></thead>
       <tbody>${body}</tbody></table>` : '<p class="empty" style="padding:6px 0">조건에 맞는 기관이 없습니다.</p>'}
+    ${ntisLinks(R.q, rows.length ? '국가R&amp;D 전체(NTIS)에서도 같은 낱말로 찾아보기 — 과제마다 수행기관이 함께 나옵니다.'
+                                  : '이 자료에서 비슷한 과제를 찾지 못했습니다 — 국가R&amp;D 전체(NTIS)에서 같은 낱말로 찾아보십시오(과제마다 수행기관이 나옵니다).')}
     ${outsideHtml(R.q)}
     <p class="fine">기관을 누르면 그 기관이 수행한 과제 이름과 내용 링크(NTIS 등 원문이 없으면 웹 검색)가 펼쳐집니다. '추정' 은 같은 과제가 기관만 달리해 여러 건 들어와
     함께 수행한 것으로 본 경우입니다. 방산 표시는 기관 이름으로 판단한 것입니다. 공개된 과제만 셉니다.
@@ -3782,6 +3832,7 @@ function simHtml(q){
                   : '<p class="fine" style="margin:4px 0">아이디어에서 온톨로지 개념을 찾지 못했습니다.</p>'}
     <h3>${S.top.length ? `핵심 단어가 ${S.need}개 이상 같은 과제 ${S.all.length > S.top.length ? `${S.all.length.toLocaleString()}건 중 상위 ${S.top.length}건` : `${S.top.length}건`}` : '핵심 단어가 같은 과제'} <span class="fine" style="margin:0">(순위: 맥락 ${CTX_W.cos} · 낱말 묶음 ${CTX_W.dice} · 축 ${CTX_W.axis})</span></h3>
     ${list || `<p class="empty" style="padding:6px 0">${none}</p>`}
+    ${ntisLinks(q, S.all.length ? '국가R&amp;D 전체(NTIS)에서도 같은 낱말로 찾아보기 —' : '', ctxPhrases(S))}
     <p class="fine">빠른 분석은 핵심 단어(기술어)가 2개 이상 겹친 과제만 보여 주고(핵심 단어가 하나면 그 하나), 부대·용역·연구 같은 일반 낱말만 겹친 과제는 보여 주지 않습니다. 순위는 맥락·낱말 묶음·축으로 매깁니다. 과제를 누르면 의미 분석 결과를 볼 수 있습니다</p>
   </div>`;
 }
