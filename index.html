@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>국방 R&D 레이더 — 국방 연구개발 과제·기관·공모 한눈에</title>
-<!-- 링크 미리 보기 (페이스북·카카오톡 등, 2026-10-04) — 그림은 site/og/ (promo/img/link_1200x630.png 복사본). 제목엔 매일 바뀌는 숫자를 넣지 않음 -->
+<!-- 링크 미리 보기 (페이스북·카카오톡 등, 2026-10-04) — 그림은 site/og/radar_1200x630.png (promo/src/og.py 가 만든 숫자 없는 그림, 2026-10-16: 숫자가 박힌 옛 그림이 카카오톡에 7,210건으로 남던 것). 그림·제목엔 매일 바뀌는 숫자를 넣지 않음 -->
 <meta name="description" content="공개된 국방 R&amp;D 과제를 검색하고, 아이디어 중복을 점검하고, 수행기관과 공모 중인 과제를 찾는 무료 비공식 사이트.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="국방 R&amp;D 레이더">
 <meta property="og:title" content="국방 R&amp;D 레이더 — 공개 국방 R&amp;D 과제를 한 화면에서">
 <meta property="og:description" content="제안 전에 비슷한 과제가 있는지 점검하고, 비슷한 분야를 해 본 수행기관과 공모 중인 과제를 찾습니다. 개인이 공개 자료로 만든 비공식·무료 사이트.">
 <meta property="og:url" content="https://kami6451-create.github.io/defense-rnd-radar/">
-<meta property="og:image" content="https://kami6451-create.github.io/defense-rnd-radar/og/link_1200x630.png">
+<meta property="og:image" content="https://kami6451-create.github.io/defense-rnd-radar/og/radar_1200x630.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="국방 R&amp;D 레이더 — 검색 · 아이디어 중복 점검 · 수행기관 · 공모 알림">
@@ -627,10 +627,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610160931', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610161026', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610160931';
+    window.__DATA_V = '202610161026';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
