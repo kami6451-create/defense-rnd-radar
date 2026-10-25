@@ -627,10 +627,10 @@ try { var _t = localStorage.getItem('mndrnd.theme'); if(_t === 'light' || _t ===
 (async function(){
   var msg = document.getElementById('bootmsg');
   try {
-    var r = await fetch('data/data.json?v=202610250029', {cache: 'default'});
+    var r = await fetch('data/data.json?v=202610251858', {cache: 'default'});
     if(!r.ok) throw new Error('HTTP ' + r.status);
     window.__DATA = await r.json();
-    window.__DATA_V = '202610250029';
+    window.__DATA_V = '202610251858';
   } catch(e) {
     msg.textContent = location.protocol === 'file:'
       ? '이 화면은 웹 주소로 열어야 합니다. 파일을 바로 열면 브라우저가 자료 파일을 막습니다 — GitHub Pages 주소나 로컬 서버로 여세요.'
@@ -1088,7 +1088,8 @@ function projRows(p){
       + `${b.amt?` ${won(b.amt)}`:''}${b.tech!=null?` <span class="nobud">기술 ${b.tech}</span>`:''}${b.note?` <span class="nobud">${esc(b.note)}</span>`:''}`).join('<br>') : ''],
     [isD2B?'계약금액':'연구비', p.bud ? won(p.bud) + (p.plan ? ` <span class="nobud">예정가격 ${won(p.plan)} · 낙찰률 ${(p.bud/p.plan*100).toFixed(1)}%</span>` : '') : ''],
     ['마감', p.close ? esc(p.close) : ''],
-    ['전략기술 분야', p.techs&&p.techs.length ? esc(p.techs.join(' / ')) : '미분류'],
+    // 분야가 비면 자동 분류 확신이 낮은 것 — 엉뚱한 분야를 붙이지 않고 비워 둠, 업데이트 때 읽어서 정함 (2026-10-25)
+    ['전략기술 분야', p.techs&&p.techs.length ? esc(p.techs.join(' / ')) : '<span class="nobud">분야 검토 필요 (자동 분류 확신이 낮아 비워 둠)</span>'],
     // 분야별 세부 분류 두 단계 (추천 분류, 2026-09-27)
     ['세부 분류', (p.techs||[]).filter(a=>asubOf(p,a).length).map(a=>`${esc(a)} › ${esc(asubOf(p,a)[0])} › ${esc(asubOf(p,a)[1])}${(p.asubEst||[]).indexOf(a)>=0?' (추정)':''}`).join('<br>') || '—'],
     [p.kwDerived ? '키워드 [추정]' : '키워드', (p.kw||[]).length ? `<div class="kw">${p.kw.map(k=>`<i>${esc(k)}</i>`).join('')}</div>` : ''],
@@ -4054,8 +4055,8 @@ function drawAreas(){
     else {
       const base = subset({tech:true}).filter(i=>(P[i].techs||[]).indexOf(A) >= 0);
       const c1 = new Map(), c2 = new Map();
-      let est = 0;
-      base.forEach(i=>{ const [a, b] = asubOf(P[i], A); if(a) c1.set(a,(c1.get(a)||0)+1); if(a===psubFilter && b) c2.set(b,(c2.get(b)||0)+1);
+      let est = 0, none = 0;   // none = 확신이 낮아 세부를 비워 둔 과제 (2026-10-25)
+      base.forEach(i=>{ const [a, b] = asubOf(P[i], A); if(a) c1.set(a,(c1.get(a)||0)+1); else none++; if(a===psubFilter && b) c2.set(b,(c2.get(b)||0)+1);
                         if((P[i].asubEst||[]).indexOf(A) >= 0) est++; });
       const order1 = (tree.length ? tree.map(t=>t[0]) : [...c1.keys()]).sort((a,b)=>(c1.get(b)||0)-(c1.get(a)||0));   // 많은 순
       let h = `<div class="psrow"><span>${esc(A)} 세부 <b>1단계</b></span>` + order1.filter(k=>c1.get(k) || k===psubFilter)
@@ -4064,7 +4065,7 @@ function drawAreas(){
         const subs = [...(tree.find(t=>t[0]===psubFilter)||[null,[...c2.keys()]])[1]].sort((a,b)=>(c2.get(b)||0)-(c2.get(a)||0));
         h += `<div class="psrow sub"><span>└ <b>${esc(psubFilter)}</b> 2단계</span>` + subs.filter(k=>c2.get(k) || k===psub2Filter)
           .map(k=>`<button type="button" data-psub2="${esc(k)}" aria-pressed="${k===psub2Filter}">${esc(k)} ${c2.get(k)||0}</button>`).join('') + `</div>`;
-      } else h += `<div class="psrow sub"><span class="fine" style="margin:0">1단계 분류를 누르면 그 아래 세부 분류가 나옵니다 · 이 사이트의 추천 분류이며 공식 분류가 아닙니다${est ? ` · ${est}건은 새로 들어온 과제라 추정` : ''}</span></div>`;
+      } else h += `<div class="psrow sub"><span class="fine" style="margin:0">1단계 분류를 누르면 그 아래 세부 분류가 나옵니다 · 이 사이트의 추천 분류이며 공식 분류가 아닙니다${est ? ` · ${est}건은 자동 추정` : ''}${none ? ` · ${none}건은 확신이 낮아 세부를 정하지 않음` : ''}</span></div>`;
       pb.innerHTML = h;
     }
   }
